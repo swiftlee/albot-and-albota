@@ -6,6 +6,8 @@ import asyncio
 import cogs.CONSTANTS as CONSTANTS
 from database.database import SQLCursor, SQLConnection
 
+reacted_messages = {}
+
 class ALBotMessageDeletionHandlers(commands.Cog, name='Message Deletion Handlers'):
     """ Functions for handling tracked messages """
     def __init__(self, bot, db):
@@ -80,8 +82,13 @@ class ALBotMessageClear(commands.Cog, name='Message Clear'):
     def __init__(self, bot):
         self.bot = bot
 
+    @commands.Cog.listener()
+    async def on_raw_reaction_add(self, payload):
+        pass # TODO: check the set mapped to the user id to handle emoji interactions in this cog, needs debugging
+
     @commands.command()
     async def clear(self, ctx, a_number=0):
+        global reacted_messages
         # Checks if number is positive int
         if not a_number > 0:
             await ctx.channel.send(content="Please input a number larger than zero")
@@ -94,14 +101,20 @@ class ALBotMessageClear(commands.Cog, name='Message Clear'):
             if a_number > 20:
                 buffer += 1
                 user_message = ctx.channel.last_message
-                await ctx.channel.send("WARNING: You are about to delete more than 20 messages, are you sure you want to do this?")
+                user = None
+                msg = await ctx.channel.send("WARNING: You are about to delete more than 20 messages, are you sure you want to do this?")
                 reactions = ["✅", "❌"]
                 for emoji in reactions:
                     await ctx.channel.last_message.add_reaction(emoji)
 
                 try:
                     reaction, user = await self.bot.wait_for('reaction_add', timeout=30.0, check=lambda reaction, user: reaction.emoji == '✅')
+                    # create a map in this format: {userId, {messageIds}}
+                    reacted_messages += {user.id: str(reacted_messages.get(user.id, 0)) + "," + str(msg.id) if reacted_messages.get(user.id, 0) is not None else str(msg.id)}
                 except asyncio.TimeoutError:
+                    msgs = reacted_messages[user.id]
+                    if str(msg.id) in str(msgs.get(user.id, 0)):
+                        reacted_messages[user.id] = reacted_messages.get(user.id, 0).replace(str(msg.id), '')
                     await ctx.channel.send('Command Timeout')
                     return
 
